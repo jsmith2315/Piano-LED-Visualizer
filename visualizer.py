@@ -213,4 +213,9 @@ class VisualizerApp:
 
 if __name__ == "__main__":
     app = VisualizerApp()
+    try:
+        app.web_interface_manager.setup_web_interface()  # Start the Flask/WebSocket server
+        print("🌐 Web interface started successfully")
+    except Exception as e:
+        print(f"⚠️ Failed to start web interface: {e}")
     app.run()

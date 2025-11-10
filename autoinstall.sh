@@ -1,114 +1,127 @@
 #!/usr/bin/env bash
-# Piano-LED-Visualizer Autoinstall Script (Trixie ARM64, Pi Zero 2 W)
-# Updated for /home/$(whoami) and optimized for Raspberry Pi OS Lite 64-bit
+# Piano-LED-Visualizer — Clean Installer for Raspberry Pi OS Lite (Trixie 64-bit)
+# Safe for SSH connections (hotspot auto-disable)
+# Tested on Raspberry Pi Zero 2 W
 
 set -e
 
-echo "🎹 Piano LED Visualizer - Installer for Raspberry Pi OS Trixie (64-bit)"
-echo "-----------------------------------------------------------------------"
+echo "🎹 Piano-LED-Visualizer — Automated Installer (Trixie 64-bit, Safe Mode)"
+echo "-------------------------------------------------------------------------------"
 
-# Detect username and home directory dynamically
+# --- Detect user and paths ------------------------------------------------------
 USER_NAME=$(whoami)
 USER_HOME=$(eval echo "~$USER_NAME")
-PROJECT_DIR="$USER_HOME/Piano-LED-Visualizer-master"
+PROJECT_DIR="$USER_HOME/Piano-LED-Visualizer"
 
-echo "👤 Running as user: $USER_NAME"
-echo "📁 Project directory: $PROJECT_DIR"
+echo "👤 Installing for user: $USER_NAME"
+echo "📂 Project directory:   $PROJECT_DIR"
 sleep 2
 
-# Step 1: Update system
-echo "📦 Updating system..."
+# --- 1️⃣ Update system ---------------------------------------------------------
+echo "📦 Updating system packages..."
 sudo apt update
 sudo apt full-upgrade -y
 sudo apt autoremove -y
 sudo apt clean
 
-# Step 2: Install all available system packages
-echo "🧰 Installing required system packages..."
+# --- 2️⃣ Install dependencies --------------------------------------------------
+echo "🧰 Installing required dependencies..."
 sudo apt install -y \
-  python3 python3-venv python3-dev python3-pip \
-  python3-numpy python3-rpi.gpio python3-spidev python3-rtmidi \
-  python3-psutil python3-pil python3-flask python3-waitress \
-  python3-websockets python3-werkzeug python3-mido python3-webcolors \
-  libasound2-dev libportmidi-dev libffi-dev build-essential git
+  python3 python3-venv python3-dev python3-pip python3-numpy \
+  python3-rpi.gpio python3-spidev python3-rtmidi python3-psutil \
+  python3-pil python3-flask python3-waitress python3-websockets \
+  python3-werkzeug python3-mido python3-webcolors \
+  libasound2-dev libportmidi-dev libffi-dev build-essential git \
+  fonts-freefont-ttf avahi-daemon
 
-# Step 3: Create venv (with system packages)
-echo "🐍 Setting up virtual environment with system packages..."
+# --- 3️⃣ Project directory -----------------------------------------------------
+if [ ! -d "$PROJECT_DIR" ]; then
+  echo "📁 Creating $PROJECT_DIR ..."
+  mkdir -p "$PROJECT_DIR"
+fi
+
 cd "$PROJECT_DIR"
-if [ -d "venv" ]; then
-  echo "⚙️ Virtual environment already exists, skipping creation."
-else
+
+# --- 4️⃣ Python venv using system packages ------------------------------------
+echo "🐍 Creating Python virtual environment..."
+if [ ! -d "venv" ]; then
   python3 -m venv venv --system-site-packages
 fi
-
-# Activate the environment
 source venv/bin/activate
 
-# Step 4: Install only what apt does NOT provide
-echo "📦 Installing additional pip-only packages..."
+# --- 5️⃣ Pip-only installs -----------------------------------------------------
+echo "📦 Installing pip-only dependencies..."
 pip install --no-cache-dir --upgrade pip setuptools wheel
-
-# Install LED driver (the only missing dependency)
 if ! python -c "import rpi_ws281x" &>/dev/null; then
-  echo "Installing rpi-ws281x (LED control library)..."
-  pip install --no-cache-dir rpi-ws281x==4.3.4 || {
-    echo "⚠️  rpi-ws281x failed, installing Adafruit NeoPixel fallback..."
-    pip install --no-cache-dir adafruit-circuitpython-neopixel
-  }
+  echo "Installing rpi-ws281x (LED driver)..."
+  pip install --no-cache-dir rpi-ws281x==4.3.4 || \
+  pip install --no-cache-dir adafruit-circuitpython-neopixel
+fi
+
+# --- 6️⃣ Fix hardcoded paths ---------------------------------------------------
+echo "🧹 Fixing hardcoded paths..."
+grep -RIl "/home/pi" "$PROJECT_DIR" | xargs sed -i "s|/home/pi|$USER_HOME|g" || true
+grep -RIl "Piano-LED-Visualizer-LED-Visualizer" "$PROJECT_DIR" | \
+  xargs sed -i "s|Piano-LED-Visualizer-LED-Visualizer|Piano-LED-Visualizer|g" || true
+sudo chown -R "$USER_NAME:$USER_NAME" "$PROJECT_DIR"
+
+# --- 7️⃣ Disable hotspot auto-enable ------------------------------------------
+# This prevents the Wi-Fi interface from dropping when the visualizer starts.
+echo "🚫 Disabling hotspot auto-activation..."
+HOTSPOT_FILE="$PROJECT_DIR/lib/platform.py"
+if grep -q "manage_hotspot" "$HOTSPOT_FILE"; then
+  sudo sed -i 's/self\.manage_hotspot/# self.manage_hotspot/' "$HOTSPOT_FILE"
+  sudo sed -i 's/platform.manage_hotspot/# platform.manage_hotspot/' "$HOTSPOT_FILE"
+  sudo sed -i 's/check_and_enable_hotspot/# check_and_enable_hotspot/' "$HOTSPOT_FILE"
+  echo "✅ Hotspot auto-activation disabled."
 else
-  echo "✅ rpi-ws281x already installed."
+  echo "ℹ️  Hotspot code not found (already disabled)."
 fi
 
-# Step 5: Enable required interfaces and overlays
-echo "🧩 Configuring system interfaces..."
-if ! grep -q "dtparam=spi=on" /boot/firmware/config.txt; then
-  echo "dtparam=spi=on" | sudo tee -a /boot/firmware/config.txt
-fi
-if ! grep -q "dtparam=i2c_arm=on" /boot/firmware/config.txt; then
-  echo "dtparam=i2c_arm=on" | sudo tee -a /boot/firmware/config.txt
-fi
-if ! grep -q "dtoverlay=ws2811" /boot/firmware/config.txt; then
-  echo "dtoverlay=ws2811" | sudo tee -a /boot/firmware/config.txt
-fi
+# --- 8️⃣ Enable SPI/I²C interfaces --------------------------------------------
+echo "🧩 Enabling SPI and I²C..."
+sudo grep -qxF "dtparam=spi=on" /boot/firmware/config.txt || echo "dtparam=spi=on" | sudo tee -a /boot/firmware/config.txt
+sudo grep -qxF "dtparam=i2c_arm=on" /boot/firmware/config.txt || echo "dtparam=i2c_arm=on" | sudo tee -a /boot/firmware/config.txt
+sudo grep -qxF "dtoverlay=ws2811" /boot/firmware/config.txt || echo "dtoverlay=ws2811" | sudo tee -a /boot/firmware/config.txt
 
-echo "✅ Interfaces configured. You may need to reboot for changes to apply."
+# --- 9️⃣ Create systemd service ------------------------------------------------
+SERVICE_FILE="/etc/systemd/system/pianoled.service"
+echo "⚙️ Creating systemd service..."
 
-# Step 6: Fix any hardcoded /home/pi or /home/Piano paths
-echo "🧹 Correcting hardcoded paths..."
-grep -RIl "/home/pi" "$PROJECT_DIR" | xargs sudo sed -i "s|/home/pi|$USER_HOME|g" || true
-grep -RIl "/home/Piano" "$PROJECT_DIR" | xargs sudo sed -i "s|/home/Piano|$PROJECT_DIR|g" || true
-sudo chown -R "$USER_NAME":"$USER_NAME" "$PROJECT_DIR"
-
-# Step 7: Offer to create systemd service
-read -p "Would you like to install a systemd service to auto-start the visualizer on boot? [y/N]: " yn
-if [[ $yn =~ ^[Yy]$ ]]; then
-  SERVICE_PATH="/etc/systemd/system/pianoled.service"
-  echo "🛠️ Creating systemd service at $SERVICE_PATH"
-  sudo bash -c "cat > $SERVICE_PATH" <<EOF
+sudo bash -c "cat > $SERVICE_FILE" <<EOF
 [Unit]
 Description=Piano LED Visualizer
 After=network.target
 
 [Service]
-ExecStart=$PROJECT_DIR/venv/bin/python $PROJECT_DIR/visualizer.py
-WorkingDirectory=$PROJECT_DIR
-Restart=always
+Type=simple
 User=$USER_NAME
+WorkingDirectory=$PROJECT_DIR
+ExecStart=/bin/bash -c 'source $PROJECT_DIR/venv/bin/activate && exec python3 $PROJECT_DIR/visualizer.py'
+Restart=always
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-  sudo systemctl daemon-reload
-  sudo systemctl enable pianoled
-  echo "✅ Systemd service installed. It will start automatically after reboot."
-fi
+sudo systemctl daemon-reload
+sudo systemctl enable pianoled
 
-echo "-----------------------------------------------------------------------"
-echo "🎉 Installation complete!"
+# --- 🔟 Final output -----------------------------------------------------------
+IP_ADDR=$(hostname -I | awk '{print $1}')
+echo "-------------------------------------------------------------------------------"
+echo "✅ Installation complete!"
+echo "📂 Project directory: $PROJECT_DIR"
+echo "🌐 Web interface: http://$IP_ADDR:8765"
+echo "💡 SPI/I²C enabled; reboot recommended if this is your first install."
+echo
+echo "Manage service:"
+echo "  sudo systemctl start pianoled"
+echo "  sudo systemctl stop pianoled"
+echo "  sudo systemctl status pianoled"
+echo
 echo "To start manually:"
 echo "  source $PROJECT_DIR/venv/bin/activate"
-echo "  sudo python3 $PROJECT_DIR/visualizer.py"
-echo
-echo "💡 Reboot your Pi if SPI/I²C or LED overlay was just enabled."
-echo "-----------------------------------------------------------------------"
+echo "  python3 $PROJECT_DIR/visualizer.py"
+echo "-------------------------------------------------------------------------------"
