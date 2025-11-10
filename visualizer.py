@@ -212,10 +212,20 @@ class VisualizerApp:
 
 
 if __name__ == "__main__":
+    import time
+
+    print("🚀 Starting Piano LED Visualizer...")
     app = VisualizerApp()
+
     try:
-        app.web_interface_manager.setup_web_interface()  # Start the Flask/WebSocket server
-        print("🌐 Web interface started successfully")
+        app.web_interface_manager.setup_web_interface()
+        print("🌐 Web interface started successfully on port 8765")
     except Exception as e:
         print(f"⚠️ Failed to start web interface: {e}")
+
+    print("⏳ Waiting 5 seconds before starting main LED loop...")
+    time.sleep(5)
+
+    print("🎹 Running main visualizer loop. Press Ctrl+C to stop.")
     app.run()
+
