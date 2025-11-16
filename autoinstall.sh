@@ -60,9 +60,9 @@ fi
 
 # --- 6️⃣ Fix hardcoded paths ---------------------------------------------------
 echo "🧹 Fixing hardcoded paths..."
-grep -RIl "/home/pi" "$PROJECT_DIR" | xargs sed -i "s|/home/pi|$USER_HOME|g" || true
-grep -RIl "Piano-LED-Visualizer-LED-Visualizer" "$PROJECT_DIR" | \
-  xargs sed -i "s|Piano-LED-Visualizer-LED-Visualizer|Piano-LED-Visualizer|g" || true
+grep -RIl "/home/jeremiah" "$PROJECT_DIR" | xargs sed -i "s|/home/jeremiah|$USER_HOME|g" || true
+grep -RIl "Piano-LED-Visualizer" "$PROJECT_DIR" | \
+  xargs sed -i "s|Piano-LED-Visualizer|Piano-LED-Visualizer|g" || true
 sudo chown -R "$USER_NAME:$USER_NAME" "$PROJECT_DIR"
 
 # --- 7️⃣ Disable hotspot auto-enable ------------------------------------------
